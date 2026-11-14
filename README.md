@@ -21,3 +21,51 @@ Come apparirà il gioco per un client:
 5) il gioco parte, viene decisa una lettera a caso dal server, interfaccia grafica che è il gioco principale (quindi dove inserisci nomi-cose-citta)
 6) finisce il tempo, poi i giocatori scelgono quali scelte degli altri giocatori tenere o bocciare.
 7) il gioco finisce e si proclama il vincitore
+
+ù
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
++dtcfyvgubhijok,ihguvfycxdrsexrdctfvgybuhjnihbgvfcdxszcdrftgvybujnhkmi, htfgvcdrgbyu7jh0olpò'à56nm,ikcdrfgvtbj,ibyujnhm,koicrfvbgmjkytfbgvrdcyujnhm,ikunhybgtfvrdcunhmj,ikunhybgtfvrcdk utfbgvcdrxseybxseqa<  FGBYTUNHJBYJMIVTMBYBGYUNHJMIKNHUBGYTFVRCDVFTBGYUNHJMIKUNHBGYVTFRCDGBYUNHJBGTFVRDCGBYUNHJMIK,OUNHYBGTFVRCDBGYUNHMJI,KNUHCRFGVDTBJMBGYVTFCDRUNHJBGYVTFCDRXSEjhimnhubgyvtfcdrbgyunhbgvyjtcrfxedzwscrvtgbycdrxsefvtgbyujnhmikouhbgyvtfcdrtvgbyunhjmikouh  bycrgdfxsecdfrbgyunhjikunhybgtrfdctbgyunhcdetgvbyunh  vcrd  tfvbgyunh  bvcrdvbg  cdertfgyhujyh7tg6rf5t6y7hujtg6rf5gtyhjuk  ijhytgfrdgjikml
