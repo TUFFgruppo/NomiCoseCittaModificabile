@@ -1,57 +1,56 @@
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
+/**
+ * sempilce -> versione semplificata del motore di gioco.
+ * Gli errori sono segnalati con eccezioni, quindi i test usano
+ * questi helper invece dei codici di risultato della vecchia API.
+ */
 public final class GameEngineTest {
+
     public static void main(String[] args) {
-        GameEngine game = new GameEngine(GameEngineTest.defaultCategories(), 1234);
+        GameEngine game = new GameEngine(defaultCategories(), 1234);
 
-        check(game.addPlayer("p1", "Carlo") == GameEngine.Result.OK, "first player joins");
-        check(game.addPlayer("p2", "Agrelli") == GameEngine.Result.OK, "second player joins");
-        check(game.addPlayer("p3", "Leo") == GameEngine.Result.OK, "third player joins");
-        check("p1".equals(game.snapshot().hostId), "first player is host");
-        check(game.start("p2") == GameEngine.Result.NOT_HOST, "only host can start");
-        check(game.start("p1") == GameEngine.Result.OK, "host starts game");
+        checkOk(() -> game.addPlayer("p1", "Carlo"), "first player joins");
+        checkOk(() -> game.addPlayer("p2", "Agrelli"), "second player joins");
+        checkOk(() -> game.addPlayer("p3", "Leo"), "third player joins");
+        check("p1".equals(game.hostId), "first player is host");
+        checkThrows(() -> game.start("p2"), IllegalStateException.class, "only host can start");
+        checkOk(() -> game.start("p1"), "host starts game");
 
-        String prefix = String.valueOf(game.snapshot().letter);
-        Map<String, String> p1Answers = new LinkedHashMap<>();
-        p1Answers.put("Nome", prefix + "nome");
-        p1Answers.put("Cosa", prefix + "cosa");
-        p1Answers.put("Citta", prefix + "citta");
-        check(game.submitAnswers("p1", p1Answers) == GameEngine.Result.OK, "valid answers submitted");
+        String prefix = String.valueOf(game.letter);
+        Map<String, String> p1Answers = Map.of(
+                "Nome", prefix + "nome",
+                "Cosa", prefix + "cosa",
+                "Citta", prefix + "citta");
+        checkOk(() -> game.submitAnswers("p1", p1Answers), "valid answers submitted");
 
-        check(game.submitAnswers("p2", answers("Nome", "Risposta non valida"))
-                == GameEngine.Result.INVALID_ANSWER, "wrong initial letter rejected");
-        check(game.submitAnswers("p2", answers("Nome", prefix + "nome"))
-                == GameEngine.Result.OK, "valid answer submitted");
-        check(game.beginVoting() == GameEngine.Result.OK, "voting begins");
+        checkThrows(() -> game.submitAnswers("p2", Map.of("Nome", "Risposta non valida")),
+                IllegalArgumentException.class, "wrong initial letter rejected");
+        checkOk(() -> game.submitAnswers("p2", Map.of("Nome", prefix + "nome")),
+                "valid answer submitted");
+        checkOk(game::beginVoting, "voting begins");
 
-        GameEngine.Snapshot beforeVotes = game.snapshot();
-        long p1AnswerId = beforeVotes.answers.get(0).id;
-        check(game.castVote("p1", p1AnswerId, true) == GameEngine.Result.CANNOT_VOTE_OWN_ANSWER,
-                "players cannot vote on own answer");
-        check(game.castVote("p2", p1AnswerId, true) == GameEngine.Result.OK, "first vote accepted");
-        check(game.castVote("p2", p1AnswerId, false) == GameEngine.Result.ALREADY_VOTED,
-                "duplicate vote rejected");
-        check(game.castVote("p3", p1AnswerId, true) == GameEngine.Result.OK, "second vote accepted");
-        check(game.finishVoting() == GameEngine.Result.OK, "voting finishes");
+        long p1AnswerId = game.answers.get(0).id;
+        checkThrows(() -> game.castVote("p1", p1AnswerId, true),
+                IllegalStateException.class, "players cannot vote on own answer");
+        checkOk(() -> game.castVote("p2", p1AnswerId, true), "first vote accepted");
+        checkThrows(() -> game.castVote("p2", p1AnswerId, false),
+                IllegalStateException.class, "duplicate vote rejected");
+        checkOk(() -> game.castVote("p3", p1AnswerId, true), "second vote accepted");
+        checkOk(game::finishVoting, "voting finishes");
 
-        GameEngine.Snapshot finished = game.snapshot();
-        check(finished.phase == GameEngine.Phase.FINISHED, "game is finished");
-        check(finished.answers.get(0).approved, "majority answer approved");
-        check(finished.players.get(0).score == 1, "approved answer scores a point");
-        check(finished.winnerIds.size() == 1 && "p1".equals(finished.winnerIds.get(0)),
+        check(game.phase == GameEngine.Phase.FINISHED, "game is finished");
+        check(game.answers.get(0).approved, "majority answer approved");
+        check(game.players.get(0).score == 1, "approved answer scores a point");
+        check(game.winnerIds.size() == 1 && "p1".equals(game.winnerIds.get(0)),
                 "highest scorer wins");
         System.out.println("All GameEngine tests passed.");
     }
 
-    private static Map<String, String> answers(String category, String text) {
-        Map<String, String> answers = new LinkedHashMap<>();
-        answers.put(category, text);
-        return answers;
-    }
-
-    private static java.util.List<String> defaultCategories() {
-        java.util.List<String> categories = new java.util.ArrayList<>();
+    private static List<String> defaultCategories() {
+        List<String> categories = new ArrayList<>();
         categories.add("Nome");
         categories.add("Cosa");
         categories.add("Citta");
@@ -62,5 +61,29 @@ public final class GameEngineTest {
         if (!condition) {
             throw new AssertionError("Test failed: " + description);
         }
+    }
+
+    /** L'azione deve riuscire senza lanciare eccezioni. */
+    private static void checkOk(Runnable action, String description) {
+        try {
+            action.run();
+        } catch (RuntimeException e) {
+            throw new AssertionError("Test failed: " + description + " -> " + e, e);
+        }
+    }
+
+    /** L'azione deve fallire con il tipo di eccezione atteso. */
+    private static void checkThrows(Runnable action, Class<? extends Exception> expected,
+                                    String description) {
+        try {
+            action.run();
+        } catch (Exception e) {
+            if (!expected.isInstance(e)) {
+                throw new AssertionError("Test failed: " + description
+                        + " -> attesa " + expected.getSimpleName() + ", ricevuta " + e);
+            }
+            return;
+        }
+        throw new AssertionError("Test failed: " + description + " -> nessuna eccezione lanciata");
     }
 }

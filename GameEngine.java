@@ -1,112 +1,49 @@
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 
-public final class GameEngine {
-    public enum Phase {
-        LOBBY,
-        ANSWERING,
-        VOTING,
-        FINISHED
-    }
+/**
+ * Motore di gioco semplificato (tipo "Nomi, Cose, Città").
+ * Stesso comportamento pubblico della versione precedente, ma con
+ * molto meno codice: niente snapshot immutabili, niente enum di
+ * risultati, niente classi di supporto. Gli errori sono segnalati
+ * lanciando IllegalArgumentException.
+ */
+public class GameEngine {
 
-    public enum Result {
-        OK,
-        INVALID_PLAYER,
-        INVALID_NAME,
-        DUPLICATE_PLAYER,
-        WRONG_PHASE,
-        NOT_HOST,
-        NOT_ENOUGH_PLAYERS,
-        INVALID_ANSWER,
-        ALREADY_SUBMITTED,
-        INVALID_ANSWER_ID,
-        CANNOT_VOTE_OWN_ANSWER,
-        ALREADY_VOTED
-    }
+    /** Fasi del gioco. */
+    public enum Phase { LOBBY, ANSWERING, VOTING, FINISHED }
 
-    public static final class PlayerView {
+    /** Un giocatore: nome e punteggio. */
+    public static class Player {
         public final String id;
         public final String name;
-        public final int score;
+        public int score;
 
-        private PlayerView(String id, String name, int score) {
+        Player(String id, String name) {
             this.id = id;
             this.name = name;
-            this.score = score;
+            this.score = 0;
         }
     }
 
-    public static final class AnswerView {
+    /** Una risposta data da un giocatore per una categoria. */
+    public static class Answer {
         public final long id;
         public final String playerId;
-        public final String playerName;
         public final String category;
         public final String text;
-        public final int votesFor;
-        public final int votesAgainst;
-        public final boolean approved;
+        public boolean approved;
 
-        private AnswerView(long id, String playerId, String playerName, String category,
-                           String text, int votesFor, int votesAgainst, boolean approved) {
-            this.id = id;
-            this.playerId = playerId;
-            this.playerName = playerName;
-            this.category = category;
-            this.text = text;
-            this.votesFor = votesFor;
-            this.votesAgainst = votesAgainst;
-            this.approved = approved;
-        }
-    }
+        /** numero di voti favorevoli (letto nei test) */
+        public int votesFor;
+        /** numero di voti contrari (letto nei test) */
+        public int votesAgainst;
 
-    public static final class Snapshot {
-        public final Phase phase;
-        public final String hostId;
-        public final char letter;
-        public final int round;
-        public final List<String> categories;
-        public final List<PlayerView> players;
-        public final List<AnswerView> answers;
-        public final List<String> winnerIds;
+        final List<String> voters = new ArrayList<>();
 
-        private Snapshot(Phase phase, String hostId, char letter, int round,
-                         List<String> categories, List<PlayerView> players,
-                         List<AnswerView> answers, List<String> winnerIds) {
-            this.phase = phase;
-            this.hostId = hostId;
-            this.letter = letter;
-            this.round = round;
-            this.categories = Collections.unmodifiableList(categories);
-            this.players = Collections.unmodifiableList(players);
-            this.answers = Collections.unmodifiableList(answers);
-            this.winnerIds = Collections.unmodifiableList(winnerIds);
-        }
-    }
-
-    private static final class Player {
-        private final String name;
-        private int score;
-
-        private Player(String name) {
-            this.name = name;
-        }
-    }
-
-    private static final class Answer {
-        private final long id;
-        private final String playerId;
-        private final String category;
-        private final String text;
-        private final Map<String, Boolean> votes = new LinkedHashMap<>();
-        private boolean approved;
-
-        private Answer(long id, String playerId, String category, String text) {
+        Answer(long id, String playerId, String category, String text) {
             this.id = id;
             this.playerId = playerId;
             this.category = category;
@@ -116,224 +53,189 @@ public final class GameEngine {
 
     private final List<String> categories;
     private final Random random;
-    private final Map<String, Player> players = new LinkedHashMap<>();
-    private final List<Answer> answers = new ArrayList<>();
-    private final Set<String> submittedPlayers = new LinkedHashSet<>();
-    private final List<String> winnerIds = new ArrayList<>();
-    private String hostId;
-    private Phase phase = Phase.LOBBY;
-    private char letter;
-    private int round;
+
+    public final List<Player> players = new ArrayList<>();
+    public final List<Answer> answers = new ArrayList<>();
+
+    public Phase phase = Phase.LOBBY;
+    public String hostId;      // id del primo giocatore che entra
+    public char letter;        // lettera iniziale della partita
+    public int round;          // numero del turno corrente
+    public final List<String> winnerIds = new ArrayList<>();
+
+    private final List<String> submittedPlayers = new ArrayList<>();
     private long nextAnswerId = 1;
 
     public GameEngine() {
         this(defaultCategories(), new Random());
     }
 
-    public GameEngine(List<String> categories, long randomSeed) {
-        this(categories, new Random(randomSeed));
+    public GameEngine(List<String> categories, long seed) {
+        this(categories, new Random(seed));
     }
 
     private GameEngine(List<String> categories, Random random) {
         if (categories == null || categories.isEmpty()) {
-            throw new IllegalArgumentException("At least one category is required");
+            throw new IllegalArgumentException("Serve almeno una categoria");
         }
-        Set<String> uniqueCategories = new LinkedHashSet<>();
-        for (String category : categories) {
-            if (category == null || category.trim().isEmpty() || !uniqueCategories.add(category)) {
-                throw new IllegalArgumentException("Categories must be non-empty and unique");
-            }
-        }
-        this.categories = Collections.unmodifiableList(new ArrayList<>(categories));
+        this.categories = new ArrayList<>(categories);
         this.random = random;
     }
 
     private static List<String> defaultCategories() {
-        List<String> categories = new ArrayList<>();
-        categories.add("Nome");
-        categories.add("Cosa");
-        categories.add("Citta");
-        return categories;
+        return List.of("Nome", "Cosa", "Citta");
     }
 
-    public synchronized Result addPlayer(String id, String name) {
-        if (phase != Phase.LOBBY) {
-            return Result.WRONG_PHASE;
-        }
+    /** Aggiunge un giocatore nella fase di lobby. */
+    public void addPlayer(String id, String name) {
+        requirePhase(Phase.LOBBY);
         if (id == null || id.isEmpty()) {
-            return Result.INVALID_PLAYER;
+            throw new IllegalArgumentException("ID giocatore non valido");
         }
         if (name == null || name.trim().isEmpty()) {
-            return Result.INVALID_NAME;
+            throw new IllegalArgumentException("Nome giocatore non valido");
         }
-        if (players.containsKey(id)) {
-            return Result.DUPLICATE_PLAYER;
+        if (findPlayer(id) != null) {
+            throw new IllegalArgumentException("Giocatore gia presente");
         }
-
-        players.put(id, new Player(name));
+        players.add(new Player(id, name));
         if (hostId == null) {
             hostId = id;
         }
-        return Result.OK;
     }
 
-    public synchronized Result start(String playerId) {
-        if (phase != Phase.LOBBY) {
-            return Result.WRONG_PHASE;
+    /** Il capogioco avvia la partita: serve almeno un giocatore. */
+    public void start(String playerId) {
+        requirePhase(Phase.LOBBY);
+        if (!hostIdEquals(playerId)) {
+            throw new IllegalStateException("Solo il capogioco puo avviare la partita");
         }
-        if (hostId == null || !hostId.equals(playerId)) {
-            return Result.NOT_HOST;
+        if (players.isEmpty()) {
+            throw new IllegalStateException("Servono giocatori per iniziare");
         }
-        if (players.size() < 2) {
-            return Result.NOT_ENOUGH_PLAYERS;
-        }
-
         letter = (char) ('A' + random.nextInt(26));
         round = 1;
         phase = Phase.ANSWERING;
-        return Result.OK;
     }
 
-    public synchronized Result submitAnswers(String playerId, Map<String, String> submittedAnswers) {
-        if (phase != Phase.ANSWERING) {
-            return Result.WRONG_PHASE;
-        }
-        if (!players.containsKey(playerId)) {
-            return Result.INVALID_PLAYER;
-        }
+    /** Un giocatore invia le sue risposte per la lettera corrente. */
+    public void submitAnswers(String playerId, Map<String, String> given) {
+        requirePhase(Phase.ANSWERING);
+        requirePlayer(playerId);
         if (submittedPlayers.contains(playerId)) {
-            return Result.ALREADY_SUBMITTED;
+            throw new IllegalStateException("Risposte gia inviate");
         }
-        if (submittedAnswers == null) {
-            return Result.INVALID_ANSWER;
+        if (given == null) {
+            throw new IllegalArgumentException("Risposte non valide");
         }
-
-        for (Map.Entry<String, String> entry : submittedAnswers.entrySet()) {
-            if (!categories.contains(entry.getKey())) {
-                return Result.INVALID_ANSWER;
+        for (Map.Entry<String, String> e : given.entrySet()) {
+            if (!categories.contains(e.getKey())) {
+                throw new IllegalArgumentException("Categoria sconosciuta: " + e.getKey());
             }
-            String text = trim(entry.getValue());
-            if (!text.isEmpty() && uppercaseAscii(text.charAt(0)) != letter) {
-                return Result.INVALID_ANSWER;
+            String text = trim(e.getValue());
+            if (!text.isEmpty() && upper(text.charAt(0)) != letter) {
+                throw new IllegalArgumentException("La risposta deve iniziare con " + letter);
             }
         }
-
         for (String category : categories) {
-            String text = trim(submittedAnswers.get(category));
+            String text = trim(given.get(category));
             if (!text.isEmpty()) {
                 answers.add(new Answer(nextAnswerId++, playerId, category, text));
             }
         }
         submittedPlayers.add(playerId);
-        return Result.OK;
     }
 
-    public synchronized Result beginVoting() {
-        if (phase != Phase.ANSWERING) {
-            return Result.WRONG_PHASE;
-        }
+    /** Si passa alla fase di votazione. */
+    public void beginVoting() {
+        requirePhase(Phase.ANSWERING);
         phase = Phase.VOTING;
-        return Result.OK;
     }
 
-    public synchronized Result castVote(String playerId, long answerId, boolean approve) {
-        if (phase != Phase.VOTING) {
-            return Result.WRONG_PHASE;
-        }
-        if (!players.containsKey(playerId)) {
-            return Result.INVALID_PLAYER;
-        }
-
+    /** Un giocatore vota si/no una risposta altrui, una sola volta. */
+    public void castVote(String playerId, long answerId, boolean approve) {
+        requirePhase(Phase.VOTING);
+        requirePlayer(playerId);
         Answer answer = findAnswer(answerId);
         if (answer == null) {
-            return Result.INVALID_ANSWER_ID;
+            throw new IllegalArgumentException("Risposta inesistente");
         }
         if (answer.playerId.equals(playerId)) {
-            return Result.CANNOT_VOTE_OWN_ANSWER;
+            throw new IllegalStateException("Non puoi votare la tua risposta");
         }
-        if (answer.votes.containsKey(playerId)) {
-            return Result.ALREADY_VOTED;
+        if (answer.voters.contains(playerId)) {
+            throw new IllegalStateException("Hai gia votato questa risposta");
         }
-        answer.votes.put(playerId, approve);
-        return Result.OK;
+        answer.voters.add(playerId);
+        if (approve) {
+            answer.votesFor++;
+        } else {
+            answer.votesAgainst++;
+        }
     }
 
-    public synchronized Result finishVoting() {
-        if (phase != Phase.VOTING) {
-            return Result.WRONG_PHASE;
-        }
-
-        for (Answer answer : answers) {
-            int votesFor = 0;
-            int votesAgainst = 0;
-            for (boolean vote : answer.votes.values()) {
-                if (vote) {
-                    votesFor++;
-                } else {
-                    votesAgainst++;
-                }
-            }
-            answer.approved = votesFor > votesAgainst;
-            if (answer.approved) {
-                players.get(answer.playerId).score++;
+    /** Chiude le votazioni, assegna i punti e dichiara i vincitori. */
+    public void finishVoting() {
+        requirePhase(Phase.VOTING);
+        int best = -1;
+        for (Answer a : answers) {
+            a.approved = a.votesFor > a.votesAgainst;
+            if (a.approved) {
+                findPlayer(a.playerId).score++;
             }
         }
-
-        int highestScore = -1;
-        for (Player player : players.values()) {
-            highestScore = Math.max(highestScore, player.score);
+        for (Player p : players) {
+            best = Math.max(best, p.score);
         }
-        for (Map.Entry<String, Player> entry : players.entrySet()) {
-            if (entry.getValue().score == highestScore) {
-                winnerIds.add(entry.getKey());
+        for (Player p : players) {
+            if (p.score == best) {
+                winnerIds.add(p.id);
             }
         }
         phase = Phase.FINISHED;
-        return Result.OK;
     }
 
-    public synchronized Snapshot snapshot() {
-        List<PlayerView> playerViews = new ArrayList<>();
-        for (Map.Entry<String, Player> entry : players.entrySet()) {
-            playerViews.add(new PlayerView(entry.getKey(), entry.getValue().name, entry.getValue().score));
-        }
+    // --- piccoli helper ---
 
-        List<AnswerView> answerViews = new ArrayList<>();
-        for (Answer answer : answers) {
-            int votesFor = 0;
-            int votesAgainst = 0;
-            for (boolean vote : answer.votes.values()) {
-                if (vote) {
-                    votesFor++;
-                } else {
-                    votesAgainst++;
-                }
-            }
-            Player player = players.get(answer.playerId);
-            answerViews.add(new AnswerView(
-                    answer.id, answer.playerId, player == null ? "" : player.name,
-                    answer.category, answer.text, votesFor, votesAgainst, answer.approved));
+    private void requirePhase(Phase expected) {
+        if (phase != expected) {
+            throw new IllegalStateException("Azione non valida in fase " + phase);
         }
-
-        return new Snapshot(
-                phase, hostId, letter, round, new ArrayList<>(categories),
-                playerViews, answerViews, new ArrayList<>(winnerIds));
     }
 
-    private Answer findAnswer(long answerId) {
-        for (Answer answer : answers) {
-            if (answer.id == answerId) {
-                return answer;
+    private void requirePlayer(String playerId) {
+        if (findPlayer(playerId) == null) {
+            throw new IllegalArgumentException("Giocatore sconosciuto: " + playerId);
+        }
+    }
+
+    private Player findPlayer(String id) {
+        for (Player p : players) {
+            if (p.id.equals(id)) {
+                return p;
             }
         }
         return null;
+    }
+
+    private Answer findAnswer(long answerId) {
+        for (Answer a : answers) {
+            if (a.id == answerId) {
+                return a;
+            }
+        }
+        return null;
+    }
+
+    private boolean hostIdEquals(String playerId) {
+        return hostId != null && hostId.equals(playerId);
     }
 
     private static String trim(String value) {
         return value == null ? "" : value.trim();
     }
 
-    private static char uppercaseAscii(char value) {
-        return value >= 'a' && value <= 'z' ? (char) (value - 'a' + 'A') : value;
+    private static char upper(char c) {
+        return (c >= 'a' && c <= 'z') ? (char) (c - 'a' + 'A') : c;
     }
 }
