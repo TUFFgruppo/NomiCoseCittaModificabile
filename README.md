@@ -22,6 +22,22 @@ Come apparirà il gioco per un client:
 6) finisce il tempo, poi i giocatori scelgono quali scelte degli altri giocatori tenere o bocciare.
 7) il gioco finisce e si proclama il vincitore
 
+## Come eseguire il client con il video di intro
+
+Il client mostra un video di introduzione all'avvio (metodo `riproduciIntro` in `Client.java`).
+Per configurare tutto automaticamente usa lo script:
+
+    ./avvia-client.sh                    # usa intro.mp4 nella cartella del progetto
+    ./avvia-client.sh percorso/video.mp4 # usa il video indicato come argomento
+
+Lo script cerca un player installato (ffplay di ffmpeg, mpv o VLC), imposta la variabile
+d'ambiente `INTRO_PLAYER`, compila i sorgenti nella cartella `build/` e avvia il client.
+Se non trova nessun player o il video non esiste, il client parte comunque senza intro.
+
+Test del motore di gioco:
+
+    javac -d build *.java && java -cp build GameEngineTest
+
 ù
 
 

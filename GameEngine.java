@@ -5,237 +5,261 @@ import java.util.Random;
 
 /**
  * Motore di gioco semplificato (tipo "Nomi, Cose, Città").
- * Stesso comportamento pubblico della versione precedente, ma con
- * molto meno codice: niente snapshot immutabili, niente enum di
- * risultati, niente classi di supporto. Gli errori sono segnalati
- * lanciando IllegalArgumentException.
+ *
+ * Il gioco procede per fasi:
+ *   LOBBY      -> i giocatori entrano nella stanza
+ *   RISPOSTE   -> ogni giocatore invia le risposte per la lettera estratta
+ *   VOTAZIONE  -> i giocatori votano si/no le risposte degli altri
+ *   TERMINATO  -> vengono assegnati i punti e dichiarati i vincitori
+ *
+ * Gli errori (azione non permessa, dati non validi) sono segnalati
+ * lanciando IllegalArgumentException o IllegalStateException.
  */
 public class GameEngine {
 
     /** Fasi del gioco. */
-    public enum Phase { LOBBY, ANSWERING, VOTING, FINISHED }
+    public enum Fase { LOBBY, RISPOSTE, VOTAZIONE, TERMINATO }
 
-    /** Un giocatore: nome e punteggio. */
-    public static class Player {
-        public final String id;
-        public final String name;
-        public int score;
+    /** Un giocatore: identificativo, nome e punteggio. */
+    public static class Giocatore {
+        public final String id;        // identificativo univoco del giocatore
+        public final String nome;      // nome mostrato in gioco
+        public int punteggio;          // punti accumulati
 
-        Player(String id, String name) {
+        Giocatore(String id, String nome) {
             this.id = id;
-            this.name = name;
-            this.score = 0;
+            this.nome = nome;
+            this.punteggio = 0;
         }
     }
 
     /** Una risposta data da un giocatore per una categoria. */
-    public static class Answer {
-        public final long id;
-        public final String playerId;
-        public final String category;
-        public final String text;
-        public boolean approved;
+    public static class Risposta {
+        public final long id;                 // identificativo univoco della risposta
+        public final String idGiocatore;      // chi ha dato la risposta
+        public final String categoria;        // categoria della risposta
+        public final String testo;            // testo della risposta
+        public boolean approvata;             // true se approvata dalla maggioranza
 
-        /** numero di voti favorevoli (letto nei test) */
-        public int votesFor;
-        /** numero di voti contrari (letto nei test) */
-        public int votesAgainst;
+        /** numero di voti favorevoli */
+        public int votiFavorevoli;
+        /** numero di voti contrari */
+        public int votiContrari;
 
-        final List<String> voters = new ArrayList<>();
+        /** id dei giocatori che hanno gia votato questa risposta */
+        final List<String> votanti = new ArrayList<>();
 
-        Answer(long id, String playerId, String category, String text) {
+        Risposta(long id, String idGiocatore, String categoria, String testo) {
             this.id = id;
-            this.playerId = playerId;
-            this.category = category;
-            this.text = text;
+            this.idGiocatore = idGiocatore;
+            this.categoria = categoria;
+            this.testo = testo;
         }
     }
 
-    private final List<String> categories;
-    private final Random random;
+    private final List<String> categorie;   // categorie di gioco (Nome, Cosa, ...)
+    private final Random casuale;           // generatore per la lettera iniziale
 
-    public final List<Player> players = new ArrayList<>();
-    public final List<Answer> answers = new ArrayList<>();
+    public final List<Giocatore> giocatori = new ArrayList<>();   // tutti i giocatori
+    public final List<Risposta> risposte = new ArrayList<>();     // tutte le risposte inviate
 
-    public Phase phase = Phase.LOBBY;
-    public String hostId;      // id del primo giocatore che entra
-    public char letter;        // lettera iniziale della partita
-    public int round;          // numero del turno corrente
-    public final List<String> winnerIds = new ArrayList<>();
+    public Fase fase = Fase.LOBBY;
+    public String idCapogioco;       // id del primo giocatore che entra (il "host")
+    public char lettera;             // lettera iniziale della partita
+    public int turno;                // numero del turno corrente
+    public final List<String> idVincitori = new ArrayList<>();  // id dei vincitori a pari merito
 
-    private final List<String> submittedPlayers = new ArrayList<>();
-    private long nextAnswerId = 1;
+    private final List<String> giocatoriInviati = new ArrayList<>(); // gia passati alle risposte
+    private long prossimaIdRisposta = 1;                              // contatore per gli id
 
+    /** Costruttore con categorie di default e casualita vera. */
     public GameEngine() {
-        this(defaultCategories(), new Random());
+        this(categorieDiDefault(), new Random());
     }
 
-    public GameEngine(List<String> categories, long seed) {
-        this(categories, new Random(seed));
+    /** Costruttore con categorie personalizzate e seme fisso (utile nei test). */
+    public GameEngine(List<String> categorie, long seme) {
+        this(categorie, new Random(seme));
     }
 
-    private GameEngine(List<String> categories, Random random) {
-        if (categories == null || categories.isEmpty()) {
+    private GameEngine(List<String> categorie, Random casuale) {
+        if (categorie == null || categorie.isEmpty()) {
             throw new IllegalArgumentException("Serve almeno una categoria");
         }
-        this.categories = new ArrayList<>(categories);
-        this.random = random;
+        this.categorie = new ArrayList<>(categorie);
+        this.casuale = casuale;
     }
 
-    private static List<String> defaultCategories() {
+    /** Categorie usate se non ne vengono fornite altre. */
+    private static List<String> categorieDiDefault() {
         return List.of("Nome", "Cosa", "Citta");
     }
 
-    /** Aggiunge un giocatore nella fase di lobby. */
-    public void addPlayer(String id, String name) {
-        requirePhase(Phase.LOBBY);
+    /** Aggiunge un giocatore nella fase di lobby; il primo diventa capogioco. */
+    public void aggiungiGiocatore(String id, String nome) {
+        richiediFase(Fase.LOBBY);
         if (id == null || id.isEmpty()) {
             throw new IllegalArgumentException("ID giocatore non valido");
         }
-        if (name == null || name.trim().isEmpty()) {
+        if (nome == null || nome.trim().isEmpty()) {
             throw new IllegalArgumentException("Nome giocatore non valido");
         }
-        if (findPlayer(id) != null) {
+        if (trovaGiocatore(id) != null) {
             throw new IllegalArgumentException("Giocatore gia presente");
         }
-        players.add(new Player(id, name));
-        if (hostId == null) {
-            hostId = id;
+        giocatori.add(new Giocatore(id, nome));
+        if (idCapogioco == null) {
+            idCapogioco = id;
         }
     }
 
-    /** Il capogioco avvia la partita: serve almeno un giocatore. */
-    public void start(String playerId) {
-        requirePhase(Phase.LOBBY);
-        if (!hostIdEquals(playerId)) {
+    /** Il capogioco avvia la partita: estrae la lettera e passa alla fase risposte. */
+    public void inizia(String idGiocatore) {
+        richiediFase(Fase.LOBBY);
+        if (!capogiocoUguale(idGiocatore)) {
             throw new IllegalStateException("Solo il capogioco puo avviare la partita");
         }
-        if (players.isEmpty()) {
+        if (giocatori.isEmpty()) {
             throw new IllegalStateException("Servono giocatori per iniziare");
         }
-        letter = (char) ('A' + random.nextInt(26));
-        round = 1;
-        phase = Phase.ANSWERING;
+        lettera = (char) ('A' + casuale.nextInt(26));  // lettera casuale da A a Z
+        turno = 1;
+        fase = Fase.RISPOSTE;
     }
 
-    /** Un giocatore invia le sue risposte per la lettera corrente. */
-    public void submitAnswers(String playerId, Map<String, String> given) {
-        requirePhase(Phase.ANSWERING);
-        requirePlayer(playerId);
-        if (submittedPlayers.contains(playerId)) {
+    /**
+     * Un giocatore invia le sue risposte per la lettera corrente.
+     * Le chiavi della mappa sono le categorie; valori vuoti = risposta omessa.
+     */
+    public void inviaRisposte(String idGiocatore, Map<String, String> date) {
+        richiediFase(Fase.RISPOSTE);
+        richiediGiocatore(idGiocatore);
+        if (giocatoriInviati.contains(idGiocatore)) {
             throw new IllegalStateException("Risposte gia inviate");
         }
-        if (given == null) {
+        if (date == null) {
             throw new IllegalArgumentException("Risposte non valide");
         }
-        for (Map.Entry<String, String> e : given.entrySet()) {
-            if (!categories.contains(e.getKey())) {
-                throw new IllegalArgumentException("Categoria sconosciuta: " + e.getKey());
+        // Prima verifica: categorie esistenti e lettera iniziale corretta.
+        for (Map.Entry<String, String> voce : date.entrySet()) {
+            if (!categorie.contains(voce.getKey())) {
+                throw new IllegalArgumentException("Categoria sconosciuta: " + voce.getKey());
             }
-            String text = trim(e.getValue());
-            if (!text.isEmpty() && upper(text.charAt(0)) != letter) {
-                throw new IllegalArgumentException("La risposta deve iniziare con " + letter);
-            }
-        }
-        for (String category : categories) {
-            String text = trim(given.get(category));
-            if (!text.isEmpty()) {
-                answers.add(new Answer(nextAnswerId++, playerId, category, text));
+            String testo = togliSpazi(voce.getValue());
+            if (!testo.isEmpty() && maiuscolo(testo.charAt(0)) != lettera) {
+                throw new IllegalArgumentException("La risposta deve iniziare con " + lettera);
             }
         }
-        submittedPlayers.add(playerId);
+        // Poi registra solo le risposte non vuote, in ordine di categoria.
+        for (String categoria : categorie) {
+            String testo = togliSpazi(date.get(categoria));
+            if (!testo.isEmpty()) {
+                risposte.add(new Risposta(prossimaIdRisposta++, idGiocatore, categoria, testo));
+            }
+        }
+        giocatoriInviati.add(idGiocatore);
     }
 
-    /** Si passa alla fase di votazione. */
-    public void beginVoting() {
-        requirePhase(Phase.ANSWERING);
-        phase = Phase.VOTING;
+    /** Si passa dalla fase risposte alla fase di votazione. */
+    public void iniziaVotazione() {
+        richiediFase(Fase.RISPOSTE);
+        fase = Fase.VOTAZIONE;
     }
 
-    /** Un giocatore vota si/no una risposta altrui, una sola volta. */
-    public void castVote(String playerId, long answerId, boolean approve) {
-        requirePhase(Phase.VOTING);
-        requirePlayer(playerId);
-        Answer answer = findAnswer(answerId);
-        if (answer == null) {
+    /** Un giocatore vota si/no una risposta altrui, una sola volta per risposta. */
+    public void vota(String idGiocatore, long idRisposta, boolean favorevole) {
+        richiediFase(Fase.VOTAZIONE);
+        richiediGiocatore(idGiocatore);
+        Risposta risposta = trovaRisposta(idRisposta);
+        if (risposta == null) {
             throw new IllegalArgumentException("Risposta inesistente");
         }
-        if (answer.playerId.equals(playerId)) {
+        if (risposta.idGiocatore.equals(idGiocatore)) {
             throw new IllegalStateException("Non puoi votare la tua risposta");
         }
-        if (answer.voters.contains(playerId)) {
+        if (risposta.votanti.contains(idGiocatore)) {
             throw new IllegalStateException("Hai gia votato questa risposta");
         }
-        answer.voters.add(playerId);
-        if (approve) {
-            answer.votesFor++;
+        risposta.votanti.add(idGiocatore);
+        if (favorevole) {
+            risposta.votiFavorevoli++;
         } else {
-            answer.votesAgainst++;
+            risposta.votiContrari++;
         }
     }
 
     /** Chiude le votazioni, assegna i punti e dichiara i vincitori. */
-    public void finishVoting() {
-        requirePhase(Phase.VOTING);
-        int best = -1;
-        for (Answer a : answers) {
-            a.approved = a.votesFor > a.votesAgainst;
-            if (a.approved) {
-                findPlayer(a.playerId).score++;
+    public void finisciVotazione() {
+        richiediFase(Fase.VOTAZIONE);
+        // Ogni risposta approvata dalla maggioranza vale un punto al suo autore.
+        for (Risposta r : risposte) {
+            r.approvata = r.votiFavorevoli > r.votiContrari;
+            if (r.approvata) {
+                trovaGiocatore(r.idGiocatore).punteggio++;
             }
         }
-        for (Player p : players) {
-            best = Math.max(best, p.score);
+        // Trova il punteggio piu alto...
+        int migliore = -1;
+        for (Giocatore g : giocatori) {
+            migliore = Math.max(migliore, g.punteggio);
         }
-        for (Player p : players) {
-            if (p.score == best) {
-                winnerIds.add(p.id);
+        // ...e tutti i giocatori con quel punteggio vincono (a pari merito).
+        for (Giocatore g : giocatori) {
+            if (g.punteggio == migliore) {
+                idVincitori.add(g.id);
             }
         }
-        phase = Phase.FINISHED;
+        fase = Fase.TERMINATO;
     }
 
     // --- piccoli helper ---
 
-    private void requirePhase(Phase expected) {
-        if (phase != expected) {
-            throw new IllegalStateException("Azione non valida in fase " + phase);
+    /** L'azione e permessa solo nella fase indicata. */
+    private void richiediFase(Fase attesa) {
+        if (fase != attesa) {
+            throw new IllegalStateException("Azione non valida in fase " + fase);
         }
     }
 
-    private void requirePlayer(String playerId) {
-        if (findPlayer(playerId) == null) {
-            throw new IllegalArgumentException("Giocatore sconosciuto: " + playerId);
+    /** Il giocatore deve esistere. */
+    private void richiediGiocatore(String idGiocatore) {
+        if (trovaGiocatore(idGiocatore) == null) {
+            throw new IllegalArgumentException("Giocatore sconosciuto: " + idGiocatore);
         }
     }
 
-    private Player findPlayer(String id) {
-        for (Player p : players) {
-            if (p.id.equals(id)) {
-                return p;
+    /** Cerca un giocatore per id, o null se non trovato. */
+    private Giocatore trovaGiocatore(String id) {
+        for (Giocatore g : giocatori) {
+            if (g.id.equals(id)) {
+                return g;
             }
         }
         return null;
     }
 
-    private Answer findAnswer(long answerId) {
-        for (Answer a : answers) {
-            if (a.id == answerId) {
-                return a;
+    /** Cerca una risposta per id, o null se non trovata. */
+    private Risposta trovaRisposta(long idRisposta) {
+        for (Risposta r : risposte) {
+            if (r.id == idRisposta) {
+                return r;
             }
         }
         return null;
     }
 
-    private boolean hostIdEquals(String playerId) {
-        return hostId != null && hostId.equals(playerId);
+    /** True se il giocatore indicato e il capogioco. */
+    private boolean capogiocoUguale(String idGiocatore) {
+        return idCapogioco != null && idCapogioco.equals(idGiocatore);
     }
 
-    private static String trim(String value) {
-        return value == null ? "" : value.trim();
+    /** Togli gli spazi ai bordi (null -> stringa vuota). */
+    private static String togliSpazi(String valore) {
+        return valore == null ? "" : valore.trim();
     }
 
-    private static char upper(char c) {
+    /** Converte una lettera minuscola in maiuscola (per il confronto con la lettera). */
+    private static char maiuscolo(char c) {
         return (c >= 'a' && c <= 'z') ? (char) (c - 'a' + 'A') : c;
     }
 }

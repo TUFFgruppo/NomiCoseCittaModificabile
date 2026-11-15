@@ -3,87 +3,90 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * sempilce -> versione semplificata del motore di gioco.
+ * Test del GameEngine semplificato (nomi delle variabili in italiano).
  * Gli errori sono segnalati con eccezioni, quindi i test usano
  * questi helper invece dei codici di risultato della vecchia API.
  */
 public final class GameEngineTest {
 
     public static void main(String[] args) {
-        GameEngine game = new GameEngine(defaultCategories(), 1234);
+        GameEngine gioco = new GameEngine(categorieDiDefault(), 1234);
 
-        checkOk(() -> game.addPlayer("p1", "Carlo"), "first player joins");
-        checkOk(() -> game.addPlayer("p2", "Agrelli"), "second player joins");
-        checkOk(() -> game.addPlayer("p3", "Leo"), "third player joins");
-        check("p1".equals(game.hostId), "first player is host");
-        checkThrows(() -> game.start("p2"), IllegalStateException.class, "only host can start");
-        checkOk(() -> game.start("p1"), "host starts game");
+//        verifica che l'azione riesca / fallisca con l'eccezione attesa
+        checkOk(() -> gioco.aggiungiGiocatore("p1", "Carlo"), "first player joins");
+        checkOk(() -> gioco.aggiungiGiocatore("p2", "Agrelli"), "second player joins");
+        checkOk(() -> gioco.aggiungiGiocatore("p3", "Leo"), "third player joins");
+        check("p1".equals(gioco.idCapogioco), "first player is host");
+        checkThrows(() -> gioco.inizia("p2"), IllegalStateException.class, "only host can start");
+        checkOk(() -> gioco.inizia("p1"), "host starts game");
 
-        String prefix = String.valueOf(game.letter);
-        Map<String, String> p1Answers = Map.of(
-                "Nome", prefix + "nome",
-                "Cosa", prefix + "cosa",
-                "Citta", prefix + "citta");
-        checkOk(() -> game.submitAnswers("p1", p1Answers), "valid answers submitted");
+        String prefisso = String.valueOf(gioco.lettera);
+        Map<String, String> risposteP1 = Map.of(
+                "Nome", prefisso + "nome",
+                "Cosa", prefisso + "cosa",
+                "Citta", prefisso + "citta");
+        checkOk(() -> gioco.inviaRisposte("p1", risposteP1), "valid answers submitted");
 
-        checkThrows(() -> game.submitAnswers("p2", Map.of("Nome", "Risposta non valida")),
+        checkThrows(() -> gioco.inviaRisposte("p2", Map.of("Nome", "Risposta non valida")),
                 IllegalArgumentException.class, "wrong initial letter rejected");
-        checkOk(() -> game.submitAnswers("p2", Map.of("Nome", prefix + "nome")),
+        checkOk(() -> gioco.inviaRisposte("p2", Map.of("Nome", prefisso + "nome")),
                 "valid answer submitted");
-        checkOk(game::beginVoting, "voting begins");
+        checkOk(gioco::iniziaVotazione, "voting begins");
 
-        long p1AnswerId = game.answers.get(0).id;
-        checkThrows(() -> game.castVote("p1", p1AnswerId, true),
+        long idRispostaP1 = gioco.risposte.get(0).id;
+        checkThrows(() -> gioco.vota("p1", idRispostaP1, true),
                 IllegalStateException.class, "players cannot vote on own answer");
-        checkOk(() -> game.castVote("p2", p1AnswerId, true), "first vote accepted");
-        checkThrows(() -> game.castVote("p2", p1AnswerId, false),
+        checkOk(() -> gioco.vota("p2", idRispostaP1, true), "first vote accepted");
+        checkThrows(() -> gioco.vota("p2", idRispostaP1, false),
                 IllegalStateException.class, "duplicate vote rejected");
-        checkOk(() -> game.castVote("p3", p1AnswerId, true), "second vote accepted");
-        checkOk(game::finishVoting, "voting finishes");
+        checkOk(() -> gioco.vota("p3", idRispostaP1, true), "second vote accepted");
+        checkOk(gioco::finisciVotazione, "voting finishes");
 
-        check(game.phase == GameEngine.Phase.FINISHED, "game is finished");
-        check(game.answers.get(0).approved, "majority answer approved");
-        check(game.players.get(0).score == 1, "approved answer scores a point");
-        check(game.winnerIds.size() == 1 && "p1".equals(game.winnerIds.get(0)),
+        check(gioco.fase == GameEngine.Fase.TERMINATO, "game is finished");
+        check(gioco.risposte.get(0).approvata, "majority answer approved");
+        check(gioco.giocatori.get(0).punteggio == 1, "approved answer scores a point");
+        check(gioco.idVincitori.size() == 1 && "p1".equals(gioco.idVincitori.get(0)),
                 "highest scorer wins");
         System.out.println("All GameEngine tests passed.");
     }
 
-    private static List<String> defaultCategories() {
-        List<String> categories = new ArrayList<>();
-        categories.add("Nome");
-        categories.add("Cosa");
-        categories.add("Citta");
-        return categories;
+    /** Categorie di gioco usate nei test. */
+    private static List<String> categorieDiDefault() {
+        List<String> categorie = new ArrayList<>();
+        categorie.add("Nome");
+        categorie.add("Cosa");
+        categorie.add("Citta");
+        return categorie;
     }
 
-    private static void check(boolean condition, String description) {
-        if (!condition) {
-            throw new AssertionError("Test failed: " + description);
+    /** La condizione deve essere vera. */
+    private static void check(boolean condizione, String descrizione) {
+        if (!condizione) {
+            throw new AssertionError("Test failed: " + descrizione);
         }
     }
 
     /** L'azione deve riuscire senza lanciare eccezioni. */
-    private static void checkOk(Runnable action, String description) {
+    private static void checkOk(Runnable azione, String descrizione) {
         try {
-            action.run();
+            azione.run();
         } catch (RuntimeException e) {
-            throw new AssertionError("Test failed: " + description + " -> " + e, e);
+            throw new AssertionError("Test failed: " + descrizione + " -> " + e, e);
         }
     }
 
     /** L'azione deve fallire con il tipo di eccezione atteso. */
-    private static void checkThrows(Runnable action, Class<? extends Exception> expected,
-                                    String description) {
+    private static void checkThrows(Runnable azione, Class<? extends Exception> attesa,
+                                    String descrizione) {
         try {
-            action.run();
+            azione.run();
         } catch (Exception e) {
-            if (!expected.isInstance(e)) {
-                throw new AssertionError("Test failed: " + description
-                        + " -> attesa " + expected.getSimpleName() + ", ricevuta " + e);
+            if (!attesa.isInstance(e)) {
+                throw new AssertionError("Test failed: " + descrizione
+                        + " -> attesa " + attesa.getSimpleName() + ", ricevuta " + e);
             }
             return;
         }
-        throw new AssertionError("Test failed: " + description + " -> nessuna eccezione lanciata");
+        throw new AssertionError("Test failed: " + descrizione + " -> nessuna eccezione lanciata");
     }
 }
