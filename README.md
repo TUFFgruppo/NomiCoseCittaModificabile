@@ -22,50 +22,5 @@ Come apparirà il gioco per un client:
 6) finisce il tempo, poi i giocatori scelgono quali scelte degli altri giocatori tenere o bocciare.
 7) il gioco finisce e si proclama il vincitore
 
-ù
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-+dtcfyvgubhijok,ihguvfycxdrsexrdctfvgybuhjnihbgvfcdxszcdrftgvybujnhkmi, htfgvcdrgbyu7jh0olpò'à56nm,ikcdrfgvtbj,ibyujnhm,koicrfvbgmjkytfbgvrdcyujnhm,ikunhybgtfvrdcunhmj,ikunhybgtfvrcdk utfbgvcdrxseybxseqa<  FGBYTUNHJBYJMIVTMBYBGYUNHJMIKNHUBGYTFVRCDVFTBGYUNHJMIKUNHBGYVTFRCDGBYUNHJBGTFVRDCGBYUNHJMIK,OUNHYBGTFVRCDBGYUNHMJI,KNUHCRFGVDTBJMBGYVTFCDRUNHJBGYVTFCDRXSEjhimnhubgyvtfcdrbgyunhbgvyjtcrfxedzwscrvtgbycdrxsefvtgbyujnhmikouhbgyvtfcdrtvgbyunhjmikouh  bycrgdfxsecdfrbgyunhjikunhybgtrfdctbgyunhcdetgvbyunh  vcrd  tfvbgyunh  bvcrdvbg  cdertfgyhujyh7tg6rf5t6y7hujtg6rf5gtyhjuk  ijhytgfrdgjikml
+# se siete tuff aprirete questo codice e farete un account
+# https://freebuff.com/?ref=ref-67a57c1a-a014-4935-8e9d-ec9b1a454711&via=rewards_link
