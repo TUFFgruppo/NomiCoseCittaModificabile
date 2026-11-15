@@ -1,339 +1,265 @@
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 
-public final class GameEngine {
-    public enum Phase {
-        LOBBY,
-        ANSWERING,
-        VOTING,
-        FINISHED
-    }
+/**
+ * Motore di gioco semplificato (tipo "Nomi, Cose, Città").
+ *
+ * Il gioco procede per fasi:
+ *   LOBBY      -> i giocatori entrano nella stanza
+ *   RISPOSTE   -> ogni giocatore invia le risposte per la lettera estratta
+ *   VOTAZIONE  -> i giocatori votano si/no le risposte degli altri
+ *   TERMINATO  -> vengono assegnati i punti e dichiarati i vincitori
+ *
+ * Gli errori (azione non permessa, dati non validi) sono segnalati
+ * lanciando IllegalArgumentException o IllegalStateException.
+ */
+public class GameEngine {
 
-    public enum Result {
-        OK,
-        INVALID_PLAYER,
-        INVALID_NAME,
-        DUPLICATE_PLAYER,
-        WRONG_PHASE,
-        NOT_HOST,
-        NOT_ENOUGH_PLAYERS,
-        INVALID_ANSWER,
-        ALREADY_SUBMITTED,
-        INVALID_ANSWER_ID,
-        CANNOT_VOTE_OWN_ANSWER,
-        ALREADY_VOTED
-    }
+    /** Fasi del gioco. */
+    public enum Fase { LOBBY, RISPOSTE, VOTAZIONE, TERMINATO }
 
-    public static final class PlayerView {
-        public final String id;
-        public final String name;
-        public final int score;
+    /** Un giocatore: identificativo, nome e punteggio. */
+    public static class Giocatore {
+        public final String id;        // identificativo univoco del giocatore
+        public final String nome;      // nome mostrato in gioco
+        public int punteggio;          // punti accumulati
 
-        private PlayerView(String id, String name, int score) {
+        Giocatore(String id, String nome) {
             this.id = id;
-            this.name = name;
-            this.score = score;
+            this.nome = nome;
+            this.punteggio = 0;
         }
     }
 
-    public static final class AnswerView {
-        public final long id;
-        public final String playerId;
-        public final String playerName;
-        public final String category;
-        public final String text;
-        public final int votesFor;
-        public final int votesAgainst;
-        public final boolean approved;
+    /** Una risposta data da un giocatore per una categoria. */
+    public static class Risposta {
+        public final long id;                 // identificativo univoco della risposta
+        public final String idGiocatore;      // chi ha dato la risposta
+        public final String categoria;        // categoria della risposta
+        public final String testo;            // testo della risposta
+        public boolean approvata;             // true se approvata dalla maggioranza
 
-        private AnswerView(long id, String playerId, String playerName, String category,
-                           String text, int votesFor, int votesAgainst, boolean approved) {
+        /** numero di voti favorevoli */
+        public int votiFavorevoli;
+        /** numero di voti contrari */
+        public int votiContrari;
+
+        /** id dei giocatori che hanno gia votato questa risposta */
+        final List<String> votanti = new ArrayList<>();
+
+        Risposta(long id, String idGiocatore, String categoria, String testo) {
             this.id = id;
-            this.playerId = playerId;
-            this.playerName = playerName;
-            this.category = category;
-            this.text = text;
-            this.votesFor = votesFor;
-            this.votesAgainst = votesAgainst;
-            this.approved = approved;
+            this.idGiocatore = idGiocatore;
+            this.categoria = categoria;
+            this.testo = testo;
         }
     }
 
-    public static final class Snapshot {
-        public final Phase phase;
-        public final String hostId;
-        public final char letter;
-        public final int round;
-        public final List<String> categories;
-        public final List<PlayerView> players;
-        public final List<AnswerView> answers;
-        public final List<String> winnerIds;
+    private final List<String> categorie;   // categorie di gioco (Nome, Cosa, ...)
+    private final Random casuale;           // generatore per la lettera iniziale
 
-        private Snapshot(Phase phase, String hostId, char letter, int round,
-                         List<String> categories, List<PlayerView> players,
-                         List<AnswerView> answers, List<String> winnerIds) {
-            this.phase = phase;
-            this.hostId = hostId;
-            this.letter = letter;
-            this.round = round;
-            this.categories = Collections.unmodifiableList(categories);
-            this.players = Collections.unmodifiableList(players);
-            this.answers = Collections.unmodifiableList(answers);
-            this.winnerIds = Collections.unmodifiableList(winnerIds);
-        }
-    }
+    public final List<Giocatore> giocatori = new ArrayList<>();   // tutti i giocatori
+    public final List<Risposta> risposte = new ArrayList<>();     // tutte le risposte inviate
 
-    private static final class Player {
-        private final String name;
-        private int score;
+    public Fase fase = Fase.LOBBY;
+    public String idCapogioco;       // id del primo giocatore che entra (il "host")
+    public char lettera;             // lettera iniziale della partita
+    public int turno;                // numero del turno corrente
+    public final List<String> idVincitori = new ArrayList<>();  // id dei vincitori a pari merito
 
-        private Player(String name) {
-            this.name = name;
-        }
-    }
+    private final List<String> giocatoriInviati = new ArrayList<>(); // gia passati alle risposte
+    private long prossimaIdRisposta = 1;                              // contatore per gli id
 
-    private static final class Answer {
-        private final long id;
-        private final String playerId;
-        private final String category;
-        private final String text;
-        private final Map<String, Boolean> votes = new LinkedHashMap<>();
-        private boolean approved;
-
-        private Answer(long id, String playerId, String category, String text) {
-            this.id = id;
-            this.playerId = playerId;
-            this.category = category;
-            this.text = text;
-        }
-    }
-
-    private final List<String> categories;
-    private final Random random;
-    private final Map<String, Player> players = new LinkedHashMap<>();
-    private final List<Answer> answers = new ArrayList<>();
-    private final Set<String> submittedPlayers = new LinkedHashSet<>();
-    private final List<String> winnerIds = new ArrayList<>();
-    private String hostId;
-    private Phase phase = Phase.LOBBY;
-    private char letter;
-    private int round;
-    private long nextAnswerId = 1;
-
+    /** Costruttore con categorie di default e casualita vera. */
     public GameEngine() {
-        this(defaultCategories(), new Random());
+        this(categorieDiDefault(), new Random());
     }
 
-    public GameEngine(List<String> categories, long randomSeed) {
-        this(categories, new Random(randomSeed));
+    /** Costruttore con categorie personalizzate e seme fisso (utile nei test). */
+    public GameEngine(List<String> categorie, long seme) {
+        this(categorie, new Random(seme));
     }
 
-    private GameEngine(List<String> categories, Random random) {
-        if (categories == null || categories.isEmpty()) {
-            throw new IllegalArgumentException("At least one category is required");
+    private GameEngine(List<String> categorie, Random casuale) {
+        if (categorie == null || categorie.isEmpty()) {
+            throw new IllegalArgumentException("Serve almeno una categoria");
         }
-        Set<String> uniqueCategories = new LinkedHashSet<>();
-        for (String category : categories) {
-            if (category == null || category.trim().isEmpty() || !uniqueCategories.add(category)) {
-                throw new IllegalArgumentException("Categories must be non-empty and unique");
-            }
-        }
-        this.categories = Collections.unmodifiableList(new ArrayList<>(categories));
-        this.random = random;
+        this.categorie = new ArrayList<>(categorie);
+        this.casuale = casuale;
     }
 
-    private static List<String> defaultCategories() {
-        List<String> categories = new ArrayList<>();
-        categories.add("Nome");
-        categories.add("Cosa");
-        categories.add("Citta");
-        return categories;
+    /** Categorie usate se non ne vengono fornite altre. */
+    private static List<String> categorieDiDefault() {
+        return List.of("Nome", "Cosa", "Citta");
     }
 
-    public synchronized Result addPlayer(String id, String name) {
-        if (phase != Phase.LOBBY) {
-            return Result.WRONG_PHASE;
-        }
+    /** Aggiunge un giocatore nella fase di lobby; il primo diventa capogioco. */
+    public void aggiungiGiocatore(String id, String nome) {
+        richiediFase(Fase.LOBBY);
         if (id == null || id.isEmpty()) {
-            return Result.INVALID_PLAYER;
+            throw new IllegalArgumentException("ID giocatore non valido");
         }
-        if (name == null || name.trim().isEmpty()) {
-            return Result.INVALID_NAME;
+        if (nome == null || nome.trim().isEmpty()) {
+            throw new IllegalArgumentException("Nome giocatore non valido");
         }
-        if (players.containsKey(id)) {
-            return Result.DUPLICATE_PLAYER;
+        if (trovaGiocatore(id) != null) {
+            throw new IllegalArgumentException("Giocatore gia presente");
         }
-
-        players.put(id, new Player(name));
-        if (hostId == null) {
-            hostId = id;
+        giocatori.add(new Giocatore(id, nome));
+        if (idCapogioco == null) {
+            idCapogioco = id;
         }
-        return Result.OK;
     }
 
-    public synchronized Result start(String playerId) {
-        if (phase != Phase.LOBBY) {
-            return Result.WRONG_PHASE;
+    /** Il capogioco avvia la partita: estrae la lettera e passa alla fase risposte. */
+    public void inizia(String idGiocatore) {
+        richiediFase(Fase.LOBBY);
+        if (!capogiocoUguale(idGiocatore)) {
+            throw new IllegalStateException("Solo il capogioco puo avviare la partita");
         }
-        if (hostId == null || !hostId.equals(playerId)) {
-            return Result.NOT_HOST;
+        if (giocatori.isEmpty()) {
+            throw new IllegalStateException("Servono giocatori per iniziare");
         }
-        if (players.size() < 2) {
-            return Result.NOT_ENOUGH_PLAYERS;
-        }
-
-        letter = (char) ('A' + random.nextInt(26));
-        round = 1;
-        phase = Phase.ANSWERING;
-        return Result.OK;
+        lettera = (char) ('A' + casuale.nextInt(26));  // lettera casuale da A a Z
+        turno = 1;
+        fase = Fase.RISPOSTE;
     }
 
-    public synchronized Result submitAnswers(String playerId, Map<String, String> submittedAnswers) {
-        if (phase != Phase.ANSWERING) {
-            return Result.WRONG_PHASE;
+    /**
+     * Un giocatore invia le sue risposte per la lettera corrente.
+     * Le chiavi della mappa sono le categorie; valori vuoti = risposta omessa.
+     */
+    public void inviaRisposte(String idGiocatore, Map<String, String> date) {
+        richiediFase(Fase.RISPOSTE);
+        richiediGiocatore(idGiocatore);
+        if (giocatoriInviati.contains(idGiocatore)) {
+            throw new IllegalStateException("Risposte gia inviate");
         }
-        if (!players.containsKey(playerId)) {
-            return Result.INVALID_PLAYER;
+        if (date == null) {
+            throw new IllegalArgumentException("Risposte non valide");
         }
-        if (submittedPlayers.contains(playerId)) {
-            return Result.ALREADY_SUBMITTED;
-        }
-        if (submittedAnswers == null) {
-            return Result.INVALID_ANSWER;
-        }
-
-        for (Map.Entry<String, String> entry : submittedAnswers.entrySet()) {
-            if (!categories.contains(entry.getKey())) {
-                return Result.INVALID_ANSWER;
+        // Prima verifica: categorie esistenti e lettera iniziale corretta.
+        for (Map.Entry<String, String> voce : date.entrySet()) {
+            if (!categorie.contains(voce.getKey())) {
+                throw new IllegalArgumentException("Categoria sconosciuta: " + voce.getKey());
             }
-            String text = trim(entry.getValue());
-            if (!text.isEmpty() && uppercaseAscii(text.charAt(0)) != letter) {
-                return Result.INVALID_ANSWER;
-            }
-        }
-
-        for (String category : categories) {
-            String text = trim(submittedAnswers.get(category));
-            if (!text.isEmpty()) {
-                answers.add(new Answer(nextAnswerId++, playerId, category, text));
+            String testo = togliSpazi(voce.getValue());
+            if (!testo.isEmpty() && maiuscolo(testo.charAt(0)) != lettera) {
+                throw new IllegalArgumentException("La risposta deve iniziare con " + lettera);
             }
         }
-        submittedPlayers.add(playerId);
-        return Result.OK;
+        // Poi registra solo le risposte non vuote, in ordine di categoria.
+        for (String categoria : categorie) {
+            String testo = togliSpazi(date.get(categoria));
+            if (!testo.isEmpty()) {
+                risposte.add(new Risposta(prossimaIdRisposta++, idGiocatore, categoria, testo));
+            }
+        }
+        giocatoriInviati.add(idGiocatore);
     }
 
-    public synchronized Result beginVoting() {
-        if (phase != Phase.ANSWERING) {
-            return Result.WRONG_PHASE;
-        }
-        phase = Phase.VOTING;
-        return Result.OK;
+    /** Si passa dalla fase risposte alla fase di votazione. */
+    public void iniziaVotazione() {
+        richiediFase(Fase.RISPOSTE);
+        fase = Fase.VOTAZIONE;
     }
 
-    public synchronized Result castVote(String playerId, long answerId, boolean approve) {
-        if (phase != Phase.VOTING) {
-            return Result.WRONG_PHASE;
+    /** Un giocatore vota si/no una risposta altrui, una sola volta per risposta. */
+    public void vota(String idGiocatore, long idRisposta, boolean favorevole) {
+        richiediFase(Fase.VOTAZIONE);
+        richiediGiocatore(idGiocatore);
+        Risposta risposta = trovaRisposta(idRisposta);
+        if (risposta == null) {
+            throw new IllegalArgumentException("Risposta inesistente");
         }
-        if (!players.containsKey(playerId)) {
-            return Result.INVALID_PLAYER;
+        if (risposta.idGiocatore.equals(idGiocatore)) {
+            throw new IllegalStateException("Non puoi votare la tua risposta");
         }
-
-        Answer answer = findAnswer(answerId);
-        if (answer == null) {
-            return Result.INVALID_ANSWER_ID;
+        if (risposta.votanti.contains(idGiocatore)) {
+            throw new IllegalStateException("Hai gia votato questa risposta");
         }
-        if (answer.playerId.equals(playerId)) {
-            return Result.CANNOT_VOTE_OWN_ANSWER;
+        risposta.votanti.add(idGiocatore);
+        if (favorevole) {
+            risposta.votiFavorevoli++;
+        } else {
+            risposta.votiContrari++;
         }
-        if (answer.votes.containsKey(playerId)) {
-            return Result.ALREADY_VOTED;
-        }
-        answer.votes.put(playerId, approve);
-        return Result.OK;
     }
 
-    public synchronized Result finishVoting() {
-        if (phase != Phase.VOTING) {
-            return Result.WRONG_PHASE;
-        }
-
-        for (Answer answer : answers) {
-            int votesFor = 0;
-            int votesAgainst = 0;
-            for (boolean vote : answer.votes.values()) {
-                if (vote) {
-                    votesFor++;
-                } else {
-                    votesAgainst++;
-                }
-            }
-            answer.approved = votesFor > votesAgainst;
-            if (answer.approved) {
-                players.get(answer.playerId).score++;
+    /** Chiude le votazioni, assegna i punti e dichiara i vincitori. */
+    public void finisciVotazione() {
+        richiediFase(Fase.VOTAZIONE);
+        // Ogni risposta approvata dalla maggioranza vale un punto al suo autore.
+        for (Risposta r : risposte) {
+            r.approvata = r.votiFavorevoli > r.votiContrari;
+            if (r.approvata) {
+                trovaGiocatore(r.idGiocatore).punteggio++;
             }
         }
-
-        int highestScore = -1;
-        for (Player player : players.values()) {
-            highestScore = Math.max(highestScore, player.score);
+        // Trova il punteggio piu alto...
+        int migliore = -1;
+        for (Giocatore g : giocatori) {
+            migliore = Math.max(migliore, g.punteggio);
         }
-        for (Map.Entry<String, Player> entry : players.entrySet()) {
-            if (entry.getValue().score == highestScore) {
-                winnerIds.add(entry.getKey());
+        // ...e tutti i giocatori con quel punteggio vincono (a pari merito).
+        for (Giocatore g : giocatori) {
+            if (g.punteggio == migliore) {
+                idVincitori.add(g.id);
             }
         }
-        phase = Phase.FINISHED;
-        return Result.OK;
+        fase = Fase.TERMINATO;
     }
 
-    public synchronized Snapshot snapshot() {
-        List<PlayerView> playerViews = new ArrayList<>();
-        for (Map.Entry<String, Player> entry : players.entrySet()) {
-            playerViews.add(new PlayerView(entry.getKey(), entry.getValue().name, entry.getValue().score));
-        }
+    // --- piccoli helper ---
 
-        List<AnswerView> answerViews = new ArrayList<>();
-        for (Answer answer : answers) {
-            int votesFor = 0;
-            int votesAgainst = 0;
-            for (boolean vote : answer.votes.values()) {
-                if (vote) {
-                    votesFor++;
-                } else {
-                    votesAgainst++;
-                }
-            }
-            Player player = players.get(answer.playerId);
-            answerViews.add(new AnswerView(
-                    answer.id, answer.playerId, player == null ? "" : player.name,
-                    answer.category, answer.text, votesFor, votesAgainst, answer.approved));
+    /** L'azione e permessa solo nella fase indicata. */
+    private void richiediFase(Fase attesa) {
+        if (fase != attesa) {
+            throw new IllegalStateException("Azione non valida in fase " + fase);
         }
-
-        return new Snapshot(
-                phase, hostId, letter, round, new ArrayList<>(categories),
-                playerViews, answerViews, new ArrayList<>(winnerIds));
     }
 
-    private Answer findAnswer(long answerId) {
-        for (Answer answer : answers) {
-            if (answer.id == answerId) {
-                return answer;
+    /** Il giocatore deve esistere. */
+    private void richiediGiocatore(String idGiocatore) {
+        if (trovaGiocatore(idGiocatore) == null) {
+            throw new IllegalArgumentException("Giocatore sconosciuto: " + idGiocatore);
+        }
+    }
+
+    /** Cerca un giocatore per id, o null se non trovato. */
+    private Giocatore trovaGiocatore(String id) {
+        for (Giocatore g : giocatori) {
+            if (g.id.equals(id)) {
+                return g;
             }
         }
         return null;
     }
 
-    private static String trim(String value) {
-        return value == null ? "" : value.trim();
+    /** Cerca una risposta per id, o null se non trovata. */
+    private Risposta trovaRisposta(long idRisposta) {
+        for (Risposta r : risposte) {
+            if (r.id == idRisposta) {
+                return r;
+            }
+        }
+        return null;
     }
 
-    private static char uppercaseAscii(char value) {
-        return value >= 'a' && value <= 'z' ? (char) (value - 'a' + 'A') : value;
+    /** True se il giocatore indicato e il capogioco. */
+    private boolean capogiocoUguale(String idGiocatore) {
+        return idCapogioco != null && idCapogioco.equals(idGiocatore);
+    }
+
+    /** Togli gli spazi ai bordi (null -> stringa vuota). */
+    private static String togliSpazi(String valore) {
+        return valore == null ? "" : valore.trim();
+    }
+
+    /** Converte una lettera minuscola in maiuscola (per il confronto con la lettera). */
+    private static char maiuscolo(char c) {
+        return (c >= 'a' && c <= 'z') ? (char) (c - 'a' + 'A') : c;
     }
 }
