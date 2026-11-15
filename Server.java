@@ -11,7 +11,12 @@ public class Server {
         final String SERVERIP = InetAddress.getLocalHost().getHostAddress();
         final InetSocketAddress SERVERADDRESS = new InetSocketAddress(SERVERIP, SERVERPORT);
         ServerSock.bind(SERVERADDRESS);
-        
+        while (true) {
+            Socket ClientSock = ServerSock.accept();
+            System.err.println("cassa");
+        }
+
+
 //            var ClientSock = ServerSock.accept();
         } catch (IOException e){
             throw new RuntimeException(e);
