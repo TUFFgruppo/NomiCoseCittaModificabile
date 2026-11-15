@@ -34,54 +34,6 @@ Lo script cerca un player installato (ffplay di ffmpeg, mpv o VLC), imposta la v
 d'ambiente `INTRO_PLAYER`, compila i sorgenti nella cartella `build/` e avvia il client.
 Se non trova nessun player o il video non esiste, il client parte comunque senza intro.
 
-Test del motore di gioco:
 
-    javac -d build *.java && java -cp build GameEngineTest
-
-ù
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-+dtcfyvgubhijok,ihguvfycxdrsexrdctfvgybuhjnihbgvfcdxszcdrftgvybujnhkmi, htfgvcdrgbyu7jh0olpò'à56nm,ikcdrfgvtbj,ibyujnhm,koicrfvbgmjkytfbgvrdcyujnhm,ikunhybgtfvrdcunhmj,ikunhybgtfvrcdk utfbgvcdrxseybxseqa<  FGBYTUNHJBYJMIVTMBYBGYUNHJMIKNHUBGYTFVRCDVFTBGYUNHJMIKUNHBGYVTFRCDGBYUNHJBGTFVRDCGBYUNHJMIK,OUNHYBGTFVRCDBGYUNHMJI,KNUHCRFGVDTBJMBGYVTFCDRUNHJBGYVTFCDRXSEjhimnhubgyvtfcdrbgyunhbgvyjtcrfxedzwscrvtgbycdrxsefvtgbyujnhmikouhbgyvtfcdrtvgbyunhjmikouh  bycrgdfxsecdfrbgyunhjikunhybgtrfdctbgyunhcdetgvbyunh  vcrd  tfvbgyunh  bvcrdvbg  cdertfgyhujyh7tg6rf5t6y7hujtg6rf5gtyhjuk  ijhytgfrdgjikml
+# se siete tuff aprirete questo codice e farete un account
+# https://freebuff.com/?ref=ref-67a57c1a-a014-4935-8e9d-ec9b1a454711&via=rewards_link
