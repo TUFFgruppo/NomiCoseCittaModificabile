@@ -1,9 +1,21 @@
 import java.io.*;
 import  java.net.*;
 
-import javax.management.*;
+//import javax.management.*;
 
 public class Server {
+
+    public static String Handle_Client(Socket Client_Sock){
+        String Client_IP = null;
+        try{
+            Client_IP = Client_Sock.getInetAddress().getHostAddress();
+            InputStream Client_Input_Stream = Client_Sock.getInputStream();
+            //problema corrente, InputStream.read è blocking
+        }
+        catch(IOException e){System.err.print("[Fatal Error with client " + Client_IP + " Disconnecting...");
+        throw new RuntimeException(e);}
+        return "OK";
+    }
 
     public static void main(String[] args){
         try(var ServerSock = new java.net.ServerSocket()){
@@ -13,11 +25,10 @@ public class Server {
         ServerSock.bind(SERVERADDRESS);
         while (true) {
             Socket ClientSock = ServerSock.accept();
-            System.err.println("cassa");
+            System.out.println("[Connected to client: " + ClientSock.getInetAddress().getHostAddress() + "]");
+            Handle_Client(ClientSock);
         }
 
-
-//            var ClientSock = ServerSock.accept();
         } catch (IOException e){
             throw new RuntimeException(e);
         }
