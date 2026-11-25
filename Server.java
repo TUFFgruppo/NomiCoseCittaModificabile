@@ -16,21 +16,22 @@ public class Server {
             final InetSocketAddress SERVERADDRESS = new InetSocketAddress(SERVERIP, SERVERPORT);
             System.out.println("[Server starting on Address " + SERVERIP + ":" + SERVERPORT + "]");
             ServerSock.bind(SERVERADDRESS);
-            Client_handler[] Client_List = new Client_handler[0];
-            Client_handler[] Client_List_Copy;
+            Thread[] Client_List = new Thread[0];
+            Thread[] Client_List_Copy;
             while (true) {
                 Socket ClientSock = ServerSock.accept();
                 System.out.println("[Connected to client: " + ClientSock.getInetAddress().getHostAddress() + "]");
-                Client_handler Handler = new Client_handler(ClientSock);
+                Client_handler Handler_Function = new Client_handler(ClientSock);
+                Thread Handler_Thread = new Thread(Handler_Function);
 
                 //blocco di codice per aumentare la lunghezza della lista di 1 e far partire un thread
                 Client_List_Copy = Client_List.clone();
-                Client_List = new Client_handler[Client_List.length+1];
+                Client_List = new Thread[Client_List.length+1];
                 for(int i = 0; i < Client_List_Copy.length-1; i++){
                     Client_List[i] = Client_List_Copy[i];
                 }
-                Client_List[Client_List.length-1] = Handler;
-                Client_List[Client_List.length-1].run();
+                Client_List[Client_List.length-1] = Handler_Thread;
+                Client_List[Client_List.length-1].start();;
             }
         }
 
