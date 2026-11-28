@@ -37,11 +37,11 @@ public class Client_handler implements Runnable {
         }
     }
 
-    public String Get_Client_input(){
+    public String Get_Input(){
         return Received_String;
     }
 
-    public void Send_Output_To_Client(String Output){
+    public void Send(String Output){
         String Client_IP = null;
         try{
             //IMPORTANTE: PrintWriter manda dati solo se fai flush, aggiungi true come secondo parametro per l'auto flush
