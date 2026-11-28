@@ -1,6 +1,6 @@
-import java.io.*;
-import  java.net.*;
 import Thread_Functions.Client_handler;
+import  java.io.*;
+import java.net.*;
 import java.util.Scanner;
 
 //questo file deve essere importato inseme a Client_handler.java nel PC server
@@ -45,9 +45,9 @@ public class Server {
                 Client_Handler_Class_List[Client_Handler_Class_List.length-1] = Handler_Class;
                 Client_Thread_List[Client_Thread_List.length-1].start();
                 
-                System.out.println("Indica il numero del cliet di cui devi osservare l'input");
+                System.out.println("Indica il numero del cliet a cui scrivere, poi indica cosa mandare");
                 Scanner Input = new Scanner(System.in);
-                System.out.println(Client_Handler_Class_List[Input.nextInt()].Get_Client_input());
+                Client_Handler_Class_List[Input.nextInt()].Send(Input.next());
             }
         }
 

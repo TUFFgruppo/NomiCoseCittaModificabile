@@ -1,5 +1,6 @@
-import java.io.*;
-import  java.net.*;
+import Thread_Functions.Client_handler;
+import  java.io.*;
+import java.net.*;
 import java.util.Scanner;
 
 public class Client {
@@ -21,15 +22,14 @@ public class Client {
             ClientSock.connect(SERVERADDRESS);
             
             //IMPORTANTE: PrintWriter manda dati solo se fai flush, aggiungi true come secondo parametro per l'auto flush
-            PrintWriter Client_Writer = new PrintWriter(ClientSock.getOutputStream());
 
             while(true){
-                System.out.println("dimmi: ");
-                var To_Write = Input.next();
-
-                Client_Writer.println(To_Write);
-                Client_Writer.flush();
-                
+                Client_handler Server_Handler_Class = new Client_handler(ClientSock);
+                Thread Server_Handler_Thread = new Thread(Server_Handler_Class);
+                Server_Handler_Thread.start();
+                System.out.println("dimmi quando ricevere");
+                Input.next();
+                System.out.println(Server_Handler_Class.Get_Input());
             }
 
         } catch (IOException e){
